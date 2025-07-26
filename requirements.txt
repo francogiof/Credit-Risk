@@ -1,8 +1,7 @@
-pandas
-torch
-transformers
-scikit-learn
-datasets
-streamlit
-python-dotenv
 boto3
+pandas
+scikit-learn
+sagemaker
+python-dotenv
+matplotlib
+seaborn

@@ -33,13 +33,15 @@ def get_description_bedrock(row):
     # Prepare field values, handling NaNs for 'Saving accounts' and 'Checking account'
     saving_acc = row['Saving accounts'] if pd.notnull(row['Saving accounts']) else None
     checking_acc = row['Checking account'] if pd.notnull(row['Checking account']) else None
-    # Build context for prompt (PREVIOUS VERSION, NO SINGLE SENTENCE INSTRUCTION)
+    # Build context for prompt
     context = (
-        "You are an expert in credit risk analysis. "
-        "The dataset contains 1000 rows and 9 columns. "
-        "The fields 'Saving accounts' and 'Checking account' have three categories: 'little', 'moderate', and 'rich', but may contain missing values (NaN). "
-        "If a field is NaN, do not generate a description for it. Avoid hallucinations and base your analysis only on the provided data. "
-        "Field meanings:\n"
+        "You are an expert in credit risk data documentation. "
+        "Given the following person data, generate a strictly factual description as a single paragraph (no line breaks, no bullet points, no recommendations, no risk assessment, no subjective language). "
+        "Include every field and value provided, and do not omit any information. "
+        "Do not add any judgment, rating, or suggestion. "
+        "If a field is NaN, do not mention it. "
+        "Write the description strictly in English. "
+        "Here are the field meanings for reference:\n"
         "Age: Edad de la persona\n"
         "Sex: Sexo de la persona\n"
         "Job: 0=unskilled and non-resident, 1=unskilled and resident, 2=skilled, 3=highly skilled\n"
@@ -68,6 +70,8 @@ def get_description_bedrock(row):
         )
         result = json.loads(response['body'].read())
         description = result.get('completion', '').strip()
+        # Remove line breaks and ensure only one paragraph
+        description = ' '.join(description.splitlines()).replace('  ', ' ')
         print(f"Generated description for row {row.name}: {description}")
         return description
     except Exception as e:

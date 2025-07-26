@@ -12,6 +12,8 @@ import os
 from dotenv import load_dotenv
 import boto3
 import pandas as pd
+import json
+import logging
 
 # Cargar variables de entorno
 load_dotenv()
@@ -27,11 +29,57 @@ bedrock = boto3.client(
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY
 )
 
+def get_description_bedrock(row):
+    # Prepare field values, handling NaNs for 'Saving accounts' and 'Checking account'
+    saving_acc = row['Saving accounts'] if pd.notnull(row['Saving accounts']) else None
+    checking_acc = row['Checking account'] if pd.notnull(row['Checking account']) else None
+    # Build context for prompt (PREVIOUS VERSION, NO SINGLE SENTENCE INSTRUCTION)
+    context = (
+        "You are an expert in credit risk analysis. "
+        "The dataset contains 1000 rows and 9 columns. "
+        "The fields 'Saving accounts' and 'Checking account' have three categories: 'little', 'moderate', and 'rich', but may contain missing values (NaN). "
+        "If a field is NaN, do not generate a description for it. Avoid hallucinations and base your analysis only on the provided data. "
+        "Field meanings:\n"
+        "Age: Edad de la persona\n"
+        "Sex: Sexo de la persona\n"
+        "Job: 0=unskilled and non-resident, 1=unskilled and resident, 2=skilled, 3=highly skilled\n"
+        "Housing: Tipo de alojamiento\n"
+        "Saving accounts: Tipo de cuenta de ahorro (may be NaN)\n"
+        "Checking account: Tipo de cuenta corriente (may be NaN)\n"
+        "Credit amount: Monto de crédito\n"
+        "Duration: Tiempo de préstamo (meses)\n"
+        "Purpose: Motivo del préstamo\n"
+    )
+    # Build person data string, omitting NaN fields
+    person_data = {k: v for k, v in row.to_dict().items() if not (k in ['Saving accounts', 'Checking account'] and pd.isnull(v))}
+    prompt = (
+        f"\n\nHuman: {context} Person data: {person_data}\n\nAssistant:"
+    )
+    print(f"Prompt for row {row.name}: {prompt}")
+    try:
+        response = bedrock.invoke_model(
+            modelId='anthropic.claude-v2:1',
+            contentType='application/json',
+            accept='application/json',
+            body=json.dumps({
+                "prompt": prompt,
+                "max_tokens_to_sample": 120
+            })
+        )
+        result = json.loads(response['body'].read())
+        description = result.get('completion', '').strip()
+        print(f"Generated description for row {row.name}: {description}")
+        return description
+    except Exception as e:
+        logging.error(f"Bedrock API error for row {row.name}: {e}")
+        print(f"Error for row {row.name}: {e}")
+        return ''
+
 def generate_descriptions():
     df = pd.read_csv('data/credir_risk_reto.csv')
-    # ...aquí iría la llamada a Bedrock para cada fila...
-    df['description'] = 'Descripción generada (mock)' # Placeholder
+    df['description'] = df.apply(get_description_bedrock, axis=1)
     df.to_csv('data/credir_risk_reto_modified.csv', index=False)
+    print('Descriptions generated and saved to credir_risk_reto_modified.csv')
 
 if __name__ == "__main__":
     generate_descriptions()
